@@ -2,8 +2,8 @@ use serde_cbor::Error;
 use std::io;
 
 pub fn to_io_error(err: Error) -> io::Error {
-    use std::error::Error;
     use serde_cbor::error::Category;
+    use std::error::Error;
 
     let kind = match err.classify() {
         Category::Syntax => io::ErrorKind::InvalidInput,

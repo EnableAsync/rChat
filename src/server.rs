@@ -9,7 +9,6 @@ use std::collections::{HashMap, HashSet};
 use crate::session;
 
 /// Message for chat server communications
-
 #[derive(Message)]
 #[rtype(result = "usize")]
 /// New chat session is created
@@ -53,11 +52,28 @@ pub struct Join {
     pub name: String,
 }
 
+/// Set nickname
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct SetNickName {
+    /// Client id
+    pub id: usize,
+    /// Nick name
+    pub nickname: String,
+}
+
+/// store client information
+#[derive(Debug)]
+pub struct Client {
+    nickname: String,
+}
+
 /// `ChatServer` manages chat rooms and responsible for coordinating chat
 /// session. implementation is super primitive
 pub struct ChatServer {
     sessions: HashMap<usize, Addr<session::ChatSession>>,
     rooms: HashMap<String, HashSet<usize>>,
+    clients: HashMap<usize, Client>,
 }
 
 impl Default for ChatServer {
@@ -69,6 +85,7 @@ impl Default for ChatServer {
         ChatServer {
             rooms,
             sessions: HashMap::new(),
+            clients: HashMap::new(),
         }
     }
 }
@@ -77,10 +94,16 @@ impl ChatServer {
     /// Send message to all users in the room
     fn send_message(&self, room: &str, message: &str, skip_id: usize) {
         if let Some(sessions) = self.rooms.get(room) {
+            let send_message: String;
+            if let Some(client) = self.clients.get(&skip_id) {
+                send_message = format!("{}: {}", client.nickname, message);
+            } else {
+                send_message = message.to_owned();
+            }
             for id in sessions {
                 if *id != skip_id {
                     if let Some(addr) = self.sessions.get(id) {
-                        addr.do_send(session::Message(message.to_owned()))
+                        addr.do_send(session::Message(send_message.to_owned()))
                     }
                 }
             }
@@ -165,6 +188,17 @@ impl Handler<ListRooms> for ChatServer {
         }
 
         MessageResult(rooms)
+    }
+}
+
+impl Handler<SetNickName> for ChatServer {
+    type Result = ();
+
+    fn handle(&mut self, msg: SetNickName, _: &mut Context<Self>) {
+        let SetNickName { id, nickname } = msg;
+        self.clients.insert(id, Client { nickname });
+        println!("{:?}", self.clients);
+        ()
     }
 }
 

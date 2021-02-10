@@ -1,11 +1,12 @@
 #![allow(dead_code)]
+
 use std::io;
 
+use crate::chat_utils::to_io_error;
 use actix::Message;
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{Buf, BufMut, BytesMut};
 use serde::{Deserialize, Serialize};
-use serde_json as json;
 use tokio_util::codec::{Decoder, Encoder};
 
 /// Client request
@@ -13,6 +14,8 @@ use tokio_util::codec::{Decoder, Encoder};
 #[rtype(result = "()")]
 #[serde(tag = "cmd", content = "data")]
 pub enum ChatRequest {
+    /// Set NickName
+    NickName(String),
     /// List rooms
     List,
     /// Join rooms
@@ -38,6 +41,9 @@ pub enum ChatResponse {
 
     /// Message
     Message(String),
+
+    /// Set nickname successfully
+    SetNickName(String),
 }
 
 /// Codec for Client -> Server transport
@@ -58,7 +64,9 @@ impl Decoder for ChatCodec {
         if src.len() >= size + 2 {
             src.advance(2);
             let buf = src.split_to(size);
-            Ok(Some(json::from_slice::<ChatRequest>(&buf)?))
+            Ok(Some(
+                serde_cbor::from_slice::<ChatRequest>(&buf).map_err(to_io_error)?,
+            ))
         } else {
             Ok(None)
         }
@@ -68,19 +76,23 @@ impl Decoder for ChatCodec {
 impl Encoder<ChatResponse> for ChatCodec {
     type Error = io::Error;
 
-    fn encode(
-        &mut self,
-        msg: ChatResponse,
-        dst: &mut BytesMut,
-    ) -> Result<(), Self::Error> {
-        let buf = serde_cbor::to_vec(&msg).unwrap();
-        println!("cbor: {:?}", buf);
-        let obj:ChatResponse = serde_cbor::from_slice(&buf).unwrap();
-        println!("from cbor: {:?}", obj);
+    fn encode(&mut self, msg: ChatResponse, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        let msg_vec = serde_cbor::to_vec(&msg).unwrap();
+        let msg_ref: &[u8] = msg_vec.as_ref();
+        match msg {
+            ChatResponse::Ping => {}
+            _ => {
+                println!("msg: {:?}", msg);
+                println!("cbor: {:?}", msg_ref);
+            }
+        }
 
-        let msg = json::to_string(&msg).unwrap();
-        let msg_ref: &[u8] = msg.as_ref();
-        println!("json: {:?}", msg);
+        // let obj:ChatResponse = serde_cbor::from_slice(&buf).unwrap();
+        // println!("from cbor: {:?}", obj);
+
+        // let msg = json::to_string(&msg).unwrap();
+        // let msg_ref: &[u8] = msg.as_ref();
+        // println!("json: {:?}", msg);
 
         dst.reserve(msg_ref.len() + 2);
         dst.put_u16(msg_ref.len() as u16);
@@ -108,7 +120,9 @@ impl Decoder for ClientChatCodec {
         if src.len() >= size + 2 {
             src.advance(2);
             let buf = src.split_to(size);
-            Ok(Some(json::from_slice::<ChatResponse>(&buf)?))
+            Ok(Some(
+                serde_cbor::from_slice::<ChatResponse>(&buf).map_err(to_io_error)?,
+            ))
         } else {
             Ok(None)
         }
@@ -118,12 +132,8 @@ impl Decoder for ClientChatCodec {
 impl Encoder<ChatRequest> for ClientChatCodec {
     type Error = io::Error;
 
-    fn encode(
-        &mut self,
-        msg: ChatRequest,
-        dst: &mut BytesMut,
-    ) -> Result<(), Self::Error> {
-        let msg = json::to_string(&msg).unwrap();
+    fn encode(&mut self, msg: ChatRequest, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        let msg = serde_cbor::to_vec(&msg).unwrap();
         let msg_ref: &[u8] = msg.as_ref();
 
         dst.reserve(msg_ref.len() + 2);

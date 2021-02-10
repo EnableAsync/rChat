@@ -48,6 +48,7 @@ impl Actor for ChatSession {
             })
             .into_actor(self)
             .then(move |res, act, _| {
+                // set client id
                 act.id = res.unwrap();
                 async {}.into_actor(act)
             })
@@ -105,6 +106,14 @@ impl StreamHandler<Result<ChatRequest, io::Error>> for ChatSession {
             }
             // we update heartbeat time on ping from peer
             Ok(ChatRequest::Ping) => self.hb = Instant::now(),
+            Ok(ChatRequest::NickName(nickname)) => {
+                println!("Client-{} set nickname {}", self.id, nickname);
+                self.addr.do_send(server::SetNickName {
+                    id: self.id,
+                    nickname: nickname.clone(),
+                });
+                self.framed.write(ChatResponse::SetNickName(nickname))
+            }
             _ => unimplemented!(),
         }
     }

@@ -7,6 +7,7 @@ use tokio::io::WriteHalf;
 use tokio::net::TcpStream;
 use tokio_util::codec::FramedRead;
 
+mod chat_utils;
 mod codec;
 
 #[actix::main]
@@ -44,11 +45,8 @@ async fn main() {
 }
 
 struct ChatClient {
-    framed: actix::io::FramedWrite<
-        codec::ChatRequest,
-        WriteHalf<TcpStream>,
-        codec::ClientChatCodec,
-    >,
+    framed:
+        actix::io::FramedWrite<codec::ChatRequest, WriteHalf<TcpStream>, codec::ClientChatCodec>,
 }
 
 #[derive(Message)]
@@ -105,6 +103,14 @@ impl Handler<ClientCommand> for ChatClient {
                         println!("!!! room name is required");
                     }
                 }
+                Some(&"/nickname") => {
+                    if v.len() == 2 {
+                        self.framed
+                            .write(codec::ChatRequest::NickName(v[1].to_owned()));
+                    } else {
+                        println!("!!! nickname is required");
+                    }
+                }
                 _ => println!("!!! unknown command"),
             }
         } else {
@@ -115,11 +121,7 @@ impl Handler<ClientCommand> for ChatClient {
 
 /// Server communication
 impl StreamHandler<Result<codec::ChatResponse, io::Error>> for ChatClient {
-    fn handle(
-        &mut self,
-        msg: Result<codec::ChatResponse, io::Error>,
-        _: &mut Context<Self>,
-    ) {
+    fn handle(&mut self, msg: Result<codec::ChatResponse, io::Error>, _: &mut Context<Self>) {
         match msg {
             Ok(codec::ChatResponse::Message(ref msg)) => {
                 println!("message: {}", msg);
@@ -133,6 +135,9 @@ impl StreamHandler<Result<codec::ChatResponse, io::Error>> for ChatClient {
                     println!("{}", room);
                 }
                 println!();
+            }
+            Ok(codec::ChatResponse::SetNickName(nickname)) => {
+                println!("!!! set nickname: {} successfully", nickname);
             }
             _ => (),
         }

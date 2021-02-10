@@ -6,6 +6,7 @@ use actix::prelude::*;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_util::codec::FramedRead;
 
+mod chat_utils;
 mod codec;
 mod server;
 mod session;
